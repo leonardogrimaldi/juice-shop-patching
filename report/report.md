@@ -32,4 +32,12 @@ Angular assiste i sviluppatori diffidendo gli input provenienti da utenti e quin
 Ora avendo apportato la modifica si tenta il payload ```<iframe src="javascript:alert(`xss`)">``` nella barra di ricerca. Visualmente non si ha nessun riscontro e neppure nell'ispeziona elementi si vede alcuna traccia dell'elemento `<iframe>`. 
 ![Payload iframe XSS nella barra di ricerca. L'albero degli elementi mostra che l'elemento non viene inserito](images/search-bar-iframe-payload-after.png)
 
-Ci si può domandare cosa avviene utilizzando un payload diverso, come `<img src=javascript:alert('XSS')>`
+Ci si può domandare cosa avviene utilizzando un payload diverso, come `<img src=javascript:alert('XSS')>`. La risposta è che *Angular* immette l'elemento nel DOM con la pecularità che viene aggiunto l'attributo *unsafe* dinanzi al codice JavaScript, rendendolo del tutto inagibile e stampando in console il seguente errore:
+![Errore in console con payload img](images/search-bar-img-payload-console.png)
+
+
+![Payload img XSS nella barra di ricerca. L'albero degli elementi mostra che l'elemento non viene inserito](images/search-bar-img-payload-after.png)
+
+
+(**PATCHED**)
+Un attacco più soffisticato che si può presuppore di eseguire conoscendo il framework del sito è il [Template Injection](https://www.paloaltonetworks.com/blog/cloud-security/template-injection-vulnerabilities/). Si tratta di incorporare dentro al payload espressioni speciali come `{{}}` e far eseguire al motore JavaScript codice arbitrario e/o malizioso.

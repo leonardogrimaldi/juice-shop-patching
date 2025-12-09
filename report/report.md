@@ -124,3 +124,40 @@ Proseguendo, viene eseguito il testing di Injection per assicurarsi che la vulne
 ![Tentativo di Injection con UNION a `rest/search?q=` da browser e visualizzazione richiesta in ZAP](images/rest-search-injection-union-after.png)
 
 Il payload ```test')) UNION SELECT sql,2,3,4,5,6,7,8,9 FROM sqlite_master--``` che in precedenza restituiva l'intero schema SQLite ora restituisce un array vuoto. 
+
+# Product Tampering
+
+`server.ts`
+
+Il file `server.ts` è il punto di entrata principale invocato all'avvio dell'applicazione Node.js. Contiene la procedura `start()` che inizializza i servizi di WebSocket riguardanti le notifiche, le metriche di Prometheus e assegna la porta di ascolto del server. Inoltre, fa uso di **ExpressJS** per impostare gli endpoint API personalizzati. Riunisce tutte le componenti del back-end per offrire indirizzi URL all'utente finale che potrà interagire ed usufruire dei servizi esposti.
+```ts
+/* Baskets: Unauthorized users are not allowed to access baskets */
+  app.use('/rest/basket', security.isAuthorized(), security.appendUserId())
+  /* BasketItems: API only accessible for authenticated users */
+  app.use('/api/BasketItems', security.isAuthorized())
+  app.use('/api/BasketItems/:id', security.isAuthorized())
+  // [...]
+  /* Products: Only GET is allowed in order to view products */
+  app.post('/api/Products', security.isAuthorized())
+  app.delete('/api/Products/:id', security.denyAll())
+```
+Il codice sopraesposto mostra come `app` viene invocato per creare gli endpoint API e abilitare le richieste con metodi HTTP come `GET`, `POST`, `PUT`, `DELETE` a indirizzi personalizzati. Il secondo parametro delle funzioni in `app` riceve generalmente la funzione di *callback*. Questa viene utilizzata per elaborare le richieste e, nel caso più specifico, confermare l'identità dell'utente per determinarne i suoi permessi. Essa viene denominata *middleware function*, poiché agisce da tramite tra la richiesta e la risposta, gestendo l'autenticazione, il logging o gli errori.
+
+In questo semplice caso, gli sviluppatori si sono dimenticati di assegnare i controlli di sicurezza sulla richiesta HTTP PUT di `/api/Products/:id`, consentendo a **tutti** gli utenti di modificare i prodotti a proprio piacimento. In questo modo, oltre a interrompere un servizio e procurare danno finanziario, l'utente malizioso potrebbe iniettare un payload XSS, inserendo script arbitrari nelle descrizioni dei prodotti.
+
+Inoltre, se il middleware conteneva un controllo dei limiti (rate-limiting), con una sola riga mancante si espone il server a un attacco DoS (Denial-of-Service).
+
+Per risolvere questa vulnerabilità occorre aggiungere il seguente blocco dentro `server.ts`:
+```ts
+app.route('/api/Products')
+    .post(security.isAuthorized())
+    .put(security.denyAll())
+    .delete(security.denyAll())
+app.route('/api/Products/:id')
+    .post(security.isAuthorized())
+    .put(security.denyAll())
+    .delete(security.denyAll())
+```
+I servizi di `PUT` e `DELETE` vengono così rifiutati, mentre per il POST è necessario un header di autenticazione; `GET` resta abilitato normalmente per tutti. L'applicazione così modificata si rende più sicura.
+
+![Errore di autorizzazione dopo aver tentato una richiesta `POST` su `api/Products/9](images/api-products-put-after.png)

@@ -160,4 +160,32 @@ app.route('/api/Products/:id')
 ```
 I servizi di `PUT` e `DELETE` vengono così rifiutati, mentre per il POST è necessario un header di autenticazione; `GET` resta abilitato normalmente per tutti. L'applicazione così modificata si rende più sicura.
 
-![Errore di autorizzazione dopo aver tentato una richiesta `POST` su `api/Products/9](images/api-products-put-after.png)
+![Errore di autorizzazione dopo aver tentato una richiesta `PUT` su `/api/Products/9](images/api-products-put-after.png)
+
+# Deprecated Interface
+
+`routes/fileUpload.ts`, `server.ts`
+
+All'interno di `server.ts` si può notare la presenza dell'interfaccia di caricamento dei file su indirizzo `/file-upload`:
+```ts
+app.post('/file-upload', uploadToMemory.single('file'), ensureFileIsPassed, metrics.observeFileUploadMetricsMiddleware(), handleZipFileUpload, handleXmlUpload, handleYamlUpload)
+```
+
+Su questa API vengono eseguite diverse funzioni *middleware*. Innanzitutto viene chiamata `uploadToMemory.single('file')` la quale esegue il caricamento del file nel buffer di memoria volatile, tramite la libreria `multer` di *Node.JS*, e aggiunge un limite di dimensione.
+```ts
+const uploadToMemory = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200000 } })
+```
+La seconda funzione `ensureFileIsPassed` controlla la presenza del file, assicurando che non sia nullo. La terza (`metrics.observeFileUploadMetricsMiddleware()`) riguarda le metriche di *Prometheus* ed esegue il logging del tipo di file oppure il conteggio di upload erronei.
+```ts
+export function observeFileUploadMetricsMiddleware () {
+  return ({ file }: Request, res: Response, next: NextFunction) => {
+    onFinished(res, () => {
+      if (file != null) {
+        res.statusCode < 400 ? fileUploadsCountMetric.labels(file.mimetype).inc() : fileUploadErrorsMetric.labels(file.mimetype).inc()
+      }
+    })
+    next()
+  }
+}
+```
+Le successive funzioni riguardano le elaborazione di file specifici con estensione `.zip`, `.xml` e `yaml`. In tutto questo, si può notare la mancanza di un'importante funzione prottetiva: il controllo sul tipo di estensioni (Nel codice è già presente il `checkFileType`, ma questo serve semplicemente per segnare il completamento della challenge. In un caso reale si può presuppore che i developer si siano dimenticati di eseguire il controllo oppure l'hanno realizzato male, poiché non comporta un semplice controllo della stringa di estensione). Nel Frontend di Angular è presente un controllo sul tipo di estensione, nello specifico in `frontend/src/app/complaint/complaint.component.ts`, ma occorre prestare attenzione poiché è codice lato client che può essere modificato o immediatamente aggirato intercettando la richiesta API con OWASP ZAP.

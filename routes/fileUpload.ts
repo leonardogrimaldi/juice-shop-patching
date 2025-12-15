@@ -16,6 +16,8 @@ import * as challengeUtils from '../lib/challengeUtils'
 import { challenges } from '../data/datacache'
 import * as utils from '../lib/utils'
 
+import { fromBuffer } from 'file-type'
+
 function ensureFileIsPassed ({ file }: Request, res: Response, next: NextFunction) {
   if (file != null) {
     next()
@@ -64,8 +66,19 @@ function checkUploadSize ({ file }: Request, res: Response, next: NextFunction) 
   next()
 }
 
-function checkFileType ({ file }: Request, res: Response, next: NextFunction) {
+async function checkFileType ({ file }: Request, res: Response, next: NextFunction) {
   const fileType = file?.originalname.substr(file.originalname.lastIndexOf('.') + 1).toLowerCase()
+  try {
+    const type = (file?.buffer != null) ? await fromBuffer(file.buffer) : undefined
+    const allowedTypes = ['application/pdf', 'application/xml', 'application/zip', 'application/x-yaml', 'text/yaml']
+    if (!type || !allowedTypes.includes(type.mime)) {
+      res.status(415)
+      next(new Error('Invalid file type'))
+    }
+  } catch (err) {
+    res.status(503)
+    next(new Error('Internal Server Error'))
+  }
   challengeUtils.solveIf(challenges.uploadTypeChallenge, () => {
     return !(fileType === 'pdf' || fileType === 'xml' || fileType === 'zip' || fileType === 'yml' || fileType === 'yaml')
   })

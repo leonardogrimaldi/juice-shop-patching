@@ -188,4 +188,44 @@ export function observeFileUploadMetricsMiddleware () {
   }
 }
 ```
-Le successive funzioni riguardano le elaborazione di file specifici con estensione `.zip`, `.xml` e `yaml`. In tutto questo, si può notare la mancanza di un'importante funzione prottetiva: il controllo sul tipo di estensioni (Nel codice è già presente il `checkFileType`, ma questo serve semplicemente per segnare il completamento della challenge. In un caso reale si può presuppore che i developer si siano dimenticati di eseguire il controllo oppure l'hanno realizzato male, poiché non comporta un semplice controllo della stringa di estensione). Nel Frontend di Angular è presente un controllo sul tipo di estensione, nello specifico in `frontend/src/app/complaint/complaint.component.ts`, ma occorre prestare attenzione poiché è codice lato client che può essere modificato o immediatamente aggirato intercettando la richiesta API con OWASP ZAP.
+Le successive funzioni riguardano la elaborazione di file specifici con estensione `.zip`, `.xml` e `yaml`. In tutto questo, si può notare la mancanza di un'importante funzione prottetiva: il controllo sul tipo di estensioni (Nel codice è già presente la funzione `checkFileType`, ma questa serve semplicemente per segnare il completamento della challenge. In un caso reale si può presuppore che i developer si siano dimenticati di eseguire il controllo oppure l'hanno realizzato male, poiché non comporta un semplice controllo della stringa di estensione). Nel Frontend di Angular è presente un controllo sul tipo di estensione, nello specifico in `frontend/src/app/complaint/complaint.component.ts`, ma occorre prestare attenzione poiché è codice lato client che può essere modificato o immediatamente aggirato intercettando la richiesta API con OWASP ZAP.
+
+Si sposta l'attenzione quindi su `routes/fileUpload.ts` dove si modificherà la funzione `checkFileType`. Si potrebbe molto facilmente pensare di usare il parametro `.mimetype` di un oggetto `Multer.File`, ma questo **non** è sicuro, poiché fa riferimento al header che viene inviato nella richiesta, che può essere intercettato dall'utente.
+
+Per eseguire un check sicuro occorre leggere il file per trovare il *magic number*, ovvero un codice specifico che identifica il contenuto del file. Su *Node.JS* questo viene eseguito con la funzione `fromBuffer`/`fileTypeFromBuffer` importata dal package `file-type`. Successivamente, si tratta semplicemente di controllare che il tipo ritornato sia incluso in quelli consentiti e in caso contrario ritornare un messaggio di errore.
+```ts
+import { fromBuffer } from 'file-type'
+async function checkFileType ({ file }: Request, res: Response, next: NextFunction) {
+  try {
+    const type = (file?.buffer != null) ? await fromBuffer(file.buffer) : undefined
+    const allowedTypes = ['application/pdf', 'application/xml', 'application/zip', 'application/x-yaml', 'text/yaml']
+    if (!type || !allowedTypes.includes(type.mime)) {
+      res.status(415)
+      next(new Error('Invalid file type'))
+    }
+  } catch (err) {
+    res.status(503)
+    next(new Error('Internal Server Error'))
+  }
+  next()
+}
+```
+Infine, si aggiorna `server.ts` per includere la funzione appena creata:
+```ts
+app.post('/file-upload', uploadToMemory.single('file'), ensureFileIsPassed, checkFileType, metrics.observeFileUploadMetricsMiddleware(), handleZipFileUpload, handleXmlUpload, handleYamlUpload)
+```
+Ora, quando si tenta di caricare un file malevolo come `test.txt.zip` già subito si ottiene il riscontro HTTP 415, `Unsupported File Type` e la pagina HTML comunica l'errore correttamente. È stata tentata anche la modifica dell'attributo `filename=test.txt.zip` in `filename=test.txt` e la risposta è la **stessa**: il patch della vulnerabilità è stato eseguito correttamente.
+![Complaint form `/complaint` con allegato un file `text.txt.zip` ](images/complaint-txt-zip-payload.png)
+![Risposta di invio del file `test.txt.zip` a destra, con messaggio di errore `Invalid file type` e risposta HTTP 415](images/complaint-txt-zip-response.png)
+
+L'ultimo procedimento da fare per completare la contromisura è quello di disabilitare effettivamente l'interfaccia deprecata. Nella funzione iniziale di `app.post('file-upload', ...)` si è potuto osservare la presenza di `handleXmlUpload` e `handleYamlUpload` che però internamente risultano deprecate per motivi di sicurezza. Questo perché entrambi sono esposti ad attacchi `XXE` che consentono di eseguire `Server-Side Request Forgery` e letture di file.
+
+Per disabilitarle, si possono effettivamente eliminare le funzioni di handling da `app.post()` formando così la istruzione finale:
+```ts
+app.post('/file-upload', uploadToMemory.single('file'), ensureFileIsPassed, metrics.observeFileUploadMetricsMiddleware(), checkUploadSize, checkFileType, handleZipFileUpload)
+```
+Il server ora non effettua più il parsing di codice `XML` o `YAML`. In più, dentro la funzione `checkFileType` precedentemente scritta si tolgono le due estensioni non pi\ consentite:
+```ts
+const allowedTypes = ['application/pdf', 'application/zip']
+```
+Finalmente, il lavoro di patching è terminato a buon fine e l'API `/file-upload` non è più vulnerabile a `XXE` e `Unrestricted File Upload`. 

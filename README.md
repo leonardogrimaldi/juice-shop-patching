@@ -1,3 +1,10 @@
+# Juice Shop Patching 
+Bachelor thesis in Computer Science and Engineering
+
+[![DOI](https://zenodo.org/badge/1109222585.svg)](https://doi.org/10.5281/zenodo.18661515)
+
+This repository contains the work for my [thesis](https://github.com/leonardogrimaldi/thesis-bachelor). It includes some **vulnerability patches** for the application, for more info consult the releases page and/or the thesis.
+
 # ![Juice Shop Logo](https://raw.githubusercontent.com/juice-shop/juice-shop/master/frontend/src/assets/public/images/JuiceShop_Logo_100px.png) OWASP Juice Shop
 
 [![OWASP Flagship](https://img.shields.io/badge/owasp-flagship%20project-48A646.svg)](https://owasp.org/projects/#sec-flagships)

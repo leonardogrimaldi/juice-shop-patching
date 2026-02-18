@@ -361,11 +361,13 @@ restoreOverwrittenFilesWithOriginals().then(() => {
     .delete(security.denyAll())
   /* Products: Only GET is allowed in order to view products */ // vuln-code-snippet neutral-line changeProductChallenge
   app.route('/api/Products')
-    .post(security.isAuthorized())
+    .get()
+    .post(security.denyAll())
     .put(security.denyAll())
     .delete(security.denyAll())
   app.route('/api/Products/:id')
-    .post(security.isAuthorized())
+    .get()
+    .post(security.denyAll())
     .put(security.denyAll())
     .delete(security.denyAll())
   /* Challenges: GET list of challenges allowed. Everything else forbidden entirely */

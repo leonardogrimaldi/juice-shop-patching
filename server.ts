@@ -365,11 +365,7 @@ restoreOverwrittenFilesWithOriginals().then(() => {
     .post(security.denyAll())
     .put(security.denyAll())
     .delete(security.denyAll())
-  app.route('/api/Products/:id')
-    .get()
-    .post(security.denyAll())
-    .put(security.denyAll())
-    .delete(security.denyAll())
+  app.use('/api/Products/:id', security.isAccounting())
   /* Challenges: GET list of challenges allowed. Everything else forbidden entirely */
   app.post('/api/Challenges', security.denyAll())
   app.use('/api/Challenges/:id', security.denyAll())
